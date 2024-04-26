@@ -14,25 +14,21 @@ pillow
 
 Example:
     ```
-    def demo(folder=pathlib.Path.cwd(), *args, **kwargs):
-        # demo for image processing by PCA/ICA
-        # save images in the folder before demo!
-        
-        if isinstance(folder, str):
-            folder = pathlib.Path(folder)
-        # define a model, such as PCA, NMF
-        model = PCA(*args, **kwargs)
-        ip = ImageEncoder(model)
-        # a user-friendly API calling `fit` method of the model
-        ip.ezfit(folder=folder)
-        # save the eigen images
-        for k, im in enumerate(ip.eigen_images):
-            save_folder = folder / 'eigen'
-            save_folder.mkdir(exist_ok=True)
-            im.save(save_folder / f'{k}.jpg')
-        # generate artificial images
-        for k, im in enumerate(ip.generate(10, toimage=True)):
-            im.save(save_folder / f'artificial{k}.jpg')
+    # save the images in a folder (current path by default)
+    folder=pathlib.Path.cwd()
+    # define a model, such as PCA, NMF
+    model = PCA(*args, **kwargs)
+    ip = ImageEncoder(model)
+    # a user-friendly API calling `fit` method of the model
+    ip.ezfit(folder=folder)
+    # save the eigen images
+    for k, im in enumerate(ip.eigen_images):
+        save_folder = folder / 'eigen'
+        save_folder.mkdir(exist_ok=True)
+        im.save(save_folder / f'{k}.jpg')
+    # generate artificial images
+    for k, im in enumerate(ip.generate(10, toimage=True)):
+        im.save(save_folder / f'artificial{k}.jpg')
    ```
 """
 
