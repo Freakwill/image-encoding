@@ -257,7 +257,7 @@ class ImageEncoder(_BaseEncoder):
         return self.fit_transform(X)
 
     @easy_for_arrays
-    def array_transform(self, X):
+    def transform_array(self, X):
         return self.transform(X)
 
     @property
@@ -296,8 +296,13 @@ class ImageEncoder(_BaseEncoder):
         return LA.norm(X-R, axis=1)
 
     @easy_for_images
-    def fit(self, *args, **kwargs):
+    def fit_image(self, *args, **kwargs):
         # images have the same size and mode
+        return super().fit(*args, **kwargs)
+
+    def fit_design(self, *args, **kwargs):
+        # images have the same size and mode
+        # as an alias for fit_image
         return super().fit(*args, **kwargs)
 
     @easy_for_folder
@@ -305,7 +310,7 @@ class ImageEncoder(_BaseEncoder):
         return super().fit(*args, **kwargs)
 
     @easy_for_arrays
-    def array_fit(self, *args, **kwargs):
+    def fit_array(self, *args, **kwargs):
         return super().fit(*args, **kwargs)
 
     def dist(self, X):
@@ -384,6 +389,13 @@ class LogitImageEncoder(ImageEncoder):
             return X
 
 
+def save_in(images, folder, exist_ok=False, prefix=''):
+    # save the eigen images in `eigen/` subfolder
+    folder.mkdir(exist_ok=exist_ok)
+    for k, im in enumerate(images):
+        im.save(folder / f'{prefix}{k}.jpg')
+
+
 if __name__ == '__main__':
     from sklearn.decomposition import *
     
@@ -398,31 +410,24 @@ if __name__ == '__main__':
         # a user-friendly API calling `fit` method of the model
         ip.ezfit(folder=folder)
         # save the eigen images in `eigen/` subfolder
-        save_folder = folder / 'eigen'
-        save_folder.mkdir(exist_ok=True)
-        for k, im in enumerate(ip.eigen_images):
-            im.save(save_folder / f'{k}.jpg')
-        # generate artificial images
-        for k, im in enumerate(ip.generate(10, toimage=True)):
-            im.save(save_folder / f'artificial{k}.jpg')
+        save_in(ip.eigen_images, folder / 'eigen', exist_ok=True)
+        # generate artificial images and save them in `generated/` subfolder
+        save_in(ip.generate(10, toimage=True), folder / 'generated', exist_ok=True)
 
     def demo_digit(folder=pathlib.Path.cwd(), *args, **kwargs):
         if isinstance(folder, str):
             folder = pathlib.Path(folder)
         from sklearn import datasets
+        digists = datasets.load_digits()
+
         model = FastICA(*args, **kwargs)
         ip = ImageEncoder(model, size=(8,8))
-        digists = datasets.load_digits()
-        ip._fit(digists.data * (255//16))
+        ip.fit(digists.data * (255//16))
 
-        save_folder = folder / 'eigen'
-        save_folder.mkdir(exist_ok=True)
-        for k, im in enumerate(ip.eigen_images):
-            im.save(save_folder / f'{k}.jpg')
+        save_in(ip.eigen_images, folder / 'eigen', exist_ok=True)
         # generate artificial images
-        for k, im in enumerate(ip.generate(10, toimage=True)):
-            im.save(save_folder / f'artificial{k}.jpg')
+        save_in(ip.generate(10, toimage=True), folder / 'eigen', exist_ok=True, prefix='generated')
 
 
-    demo_digit(n_components=15)
+    demo_digit(n_components=10)
     
