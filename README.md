@@ -8,10 +8,12 @@ image encoding by dimensional reduction models (in scikit-learn)
     def demo_digit(folder=pathlib.Path.cwd(), *args, **kwargs):
         if isinstance(folder, str):
             folder = pathlib.Path(folder)
+
         from sklearn import datasets
+        digists = datasets.load_digits()
+
         model = FastICA(*args, **kwargs)   # the backend model
         enc = ImageEncoder(model, size=(8,8))
-        digists = datasets.load_digits()
         ip.fit(digists.data * (255//16))
 
         save_in(enc.eigen_images, folder / 'eigen', exist_ok=True)
@@ -30,7 +32,7 @@ image encoding by dimensional reduction models (in scikit-learn)
         
         if isinstance(folder, str):
             folder = pathlib.Path(folder)
-        # define a model, such as PCA, NMF
+        # define a backend model, such as PCA, NMF
         model = PCA(*args, **kwargs)
         enc = ImageEncoder(model)
         # a user-friendly API calling `fit` method of the model
