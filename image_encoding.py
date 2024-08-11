@@ -94,6 +94,7 @@ def get_image_names(files=None, folder=None, exts=('.jpg','.jpeg','.png')):
         Exception -- Provide files or a folder
         LookupError -- A file name is invalid
     """
+
     images = []
     if files:
         if folder:
@@ -119,8 +120,10 @@ def get_image_names(files=None, folder=None, exts=('.jpg','.jpeg','.png')):
 
     return images
 
+
 def get_images(*args, **kwargs):
     return map(Image.open, get_image_names(*args, **kwargs))
+
 
 # def op_images(m):
 #     def mm(obj, images, *args, **kwargs):
@@ -134,6 +137,7 @@ def get_images(*args, **kwargs):
 #             obj.mode = mode
 #         return m(obj, X, *args, **kwargs)
 #     return mm
+
 
 def easy_for_folder(m):
     # decorator making a function act on folder instead of an array
@@ -159,6 +163,7 @@ def easy_for_images(m):
 
 
 def easy_for_arrays(m):
+
     def mm(obj, arrays, *args, **kwargs):
         shape = arrays[0].shape
         obj.size = shape[:2]
@@ -181,11 +186,11 @@ def easy_for_arrays(m):
 
 
 def expit(x):
-    return np.uint8(np.round(256 * ss.expit(x) - 0.5))
+    return np.round(256 * ss.expit(x) - 0.5).astype(np.uint8)
 
 
 def logit(x):
-    return ss.logit((x+0.5) / 256)
+    return ss.logit((x + 0.5) / 256)
 
 
 class _BaseEncoder(TransformerMixin, BaseEstimator):
@@ -226,6 +231,7 @@ class _BaseEncoder(TransformerMixin, BaseEstimator):
 
 
 class ImageEncoder(_BaseEncoder):
+
     __sigular_values = None
 
     def __init__(self, model, size=None, mode=None, n_channels=1):
@@ -271,19 +277,38 @@ class ImageEncoder(_BaseEncoder):
             size = self.size + (self.n_channels,)
         return [vector2image(_minmaxmap(y), size, mode=self.mode) for y in self.eigens_]
 
+    @property
+    def eigen_arrays(self):
+        """Get eigen arrays
+
+        transform the eigens_ to arrays
+        """
+        def _minmaxmap(X, mi=0, ma=255):
+            lb, ub = X.min(), X.max()
+            return mi + (X - lb) / (ub - lb) * ma
+        if self.n_channels == 1:
+            size = self.size
+        else:
+            size = self.size + (self.n_channels,)
+        return np.array([_minmaxmap(y).reshape(size) for y in self.eigens_])
+
     def inverse_transform(self, Y, toimage=False):
         # transform to images if toimage=True
         X = super().inverse_transform(Y)
         if toimage:
             if self.size is None:
                 raise Exception("Attribute `size` (as the size of the images) should not be None!")
-            return [vector2image(x, size=self.size, mode=self.mode) for x in X]
+            return np.array([vector2image(x, size=self.size, mode=self.mode) for x in X])
         else:
             return X
 
     def reconstruct(self, X, toimage=True):
         # reconstruction of images under KL basis
         return self.inverse_transform(self.transform(X), toimage=toimage)
+
+    def reconstruct_array(self, X, toimage=True):
+        # reconstruction of images under KL basis
+        return self.inverse_transform(self.transform_array(X), toimage=toimage)
 
     def error(self, X):
         # error of reconstruction
@@ -297,8 +322,7 @@ class ImageEncoder(_BaseEncoder):
         return super().fit(*args, **kwargs)
 
     def fit_design(self, *args, **kwargs):
-        # images have the same size and mode
-        # as an alias for fit_image
+        # as an alias for fit
         return super().fit(*args, **kwargs)
 
     @easy_for_folder
@@ -307,6 +331,7 @@ class ImageEncoder(_BaseEncoder):
 
     @easy_for_arrays
     def fit_array(self, *args, **kwargs):
+        # arrays represent images with the same size
         return super().fit(*args, **kwargs)
 
     def dist(self, X):
@@ -321,16 +346,18 @@ class ImageEncoder(_BaseEncoder):
     #     pass
 
     def generate(self, size=1, toimage=False, standard=True, scale=None):
-        from scipy.stats import gaussian_kde, norm
+        from scipy.stats import gaussian_kde, norm, gamma, gengamma
         from sklearn.decomposition import FastICA, NMF
 
-        cc = self.coordinates_.T
+        crd = self.coordinates_.T
         if isinstance(self.model, FastICA):
             _gen = lambda data, size: gaussian_kde(data).resample(size)
-            c = np.row_stack([_gen(c, size) for c in cc])
+            c = np.row_stack([_gen(c, size) for c in crd])
             return self.inverse_transform(c.T, toimage=toimage)
         if isinstance(self.model, NMF):
-            standard = False
+            _gen = lambda data, size: gengamma.rvs(*gengamma.fit(data), size=size)
+            c = np.row_stack([_gen(c, size) for c in crd])
+            return self.inverse_transform(c.T, toimage=toimage)
         if standard:
             if scale is None:
                 scale = self.model.singular_values_
@@ -338,7 +365,7 @@ class ImageEncoder(_BaseEncoder):
             return self.inverse_transform(c, toimage=toimage)
         else:
             _gen = lambda data, size: norm.rvs(*norm.fit(data), size=size)
-            c = np.row_stack([_gen(c, size) for c in cc])
+            c = np.row_stack([_gen(c, size) for c in crd])
             return self.inverse_transform(c.T, toimage=toimage)
 
     def generate_grid(self, r=4, c=4, toimage=True, *args, **kwargs):
@@ -350,17 +377,18 @@ class ImageEncoder(_BaseEncoder):
             X = np.vstack([np.hstack([X[i*c+j].reshape((h, w, 3)) for j in range(c)]) for i in range(r)])
         else:
             X = np.block([[[X[i*c+j].reshape((h, w))] for j in range(c)] for i in range(r)])
-        X = np.insert(X, np.arange(1, r)*h, 0, axis=0)
-        X = np.insert(X, np.arange(1, c)*w, 0, axis=1)
+        v = 255
+        X = np.insert(X, np.arange(1, r)*h, v, axis=0)
+        X = np.insert(X, np.arange(1, c)*w, v, axis=1)
 
         if toimage:
             return Image.fromarray(X.astype('uint8')).convert(self.mode)
         else:
             return X
-        return X
 
 
 class LogitImageEncoder(ImageEncoder):
+
     def _fit(self, X):
         """fit method
         
